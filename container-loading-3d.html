@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 貨櫃裝載模擬系統 by DAR</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+        .app-container { display: flex; height: 100vh; }
+
+        .control-panel {
+            width: 400px;
+            background: rgba(20, 30, 48, 0.95);
+            border-right: 1px solid rgba(100, 150, 255, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .panel-header {
+            background: linear-gradient(90deg, #2563eb, #1d4ed8);
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .panel-header h1 { font-size: 16px; font-weight: 600; }
+        .panel-section {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(100, 150, 255, 0.1);
+        }
+        .section-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #60a5fa;
+            margin-bottom: 12px;
+        }
+        .input-group { margin-bottom: 10px; }
+        .input-group label {
+            display: block;
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 5px;
+        }
+        .input-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px 10px;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(100, 150, 255, 0.2);
+            border-radius: 5px;
+            color: #e0e0e0;
+            font-size: 13px;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        textarea {
+            min-height: 130px;
+            resize: vertical;
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+        }
+        .btn-secondary {
+            background: rgba(100, 150, 255, 0.1);
+            color: #60a5fa;
+            border: 1px solid rgba(100, 150, 255, 0.3);
+            margin-bottom: 8px;
+        }
+
+        .cargo-settings {
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .cargo-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 5px;
+            margin-bottom: 6px;
+            font-size: 12px;
+        }
+        .cargo-item:hover {
+            background: rgba(59, 130, 246, 0.15);
+        }
+        .cargo-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .cargo-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
+        .cargo-name { 
+            font-weight: 500; 
+            color: #f1f5f9;
+        }
+        .cargo-qty {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.3);
+            color: #60a5fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 6px;
+        }
+        .cargo-size { font-size: 10px; color: #64748b; }
+        .cargo-options { display: flex; gap: 10px; }
+        .checkbox-wrap {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .checkbox-wrap input { width: 14px; height: 14px; accent-color: #3b82f6; }
+        .checkbox-wrap label { font-size: 10px; color: #94a3b8; }
+
+        .select-all {
+            display: flex;
+            gap: 16px;
+            padding: 8px 10px;
+            background: rgba(59, 130, 246, 0.1);
+            border-radius: 5px;
+            margin-bottom: 8px;
+        }
+        .select-all label { color: #60a5fa; font-weight: 500; }
+
+        .display-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .display-options .checkbox-wrap {
+            padding: 6px 10px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 5px;
+        }
+        .display-options .checkbox-wrap label {
+            font-size: 12px;
+            color: #e0e0e0;
+        }
+
+        .validation-box {
+            margin-top: 12px;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            display: none;
+        }
+        .validation-box.show { display: block; }
+        .validation-box.success { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.4); }
+        .validation-box.warning { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); }
+        .validation-box.error { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); }
+        .validation-title { font-weight: 600; margin-bottom: 6px; }
+        .validation-box.success .validation-title { color: #34d399; }
+        .validation-box.warning .validation-title { color: #fbbf24; }
+        .validation-box.error .validation-title { color: #f87171; }
+        .validation-list { list-style: none; padding: 0; }
+        .validation-list li { padding: 3px 0; color: #94a3b8; }
+
+        .main-view { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+        .dashboard {
+            background: rgba(20, 30, 48, 0.9);
+            border-bottom: 1px solid rgba(100, 150, 255, 0.2);
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+        .metric {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .metric-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        .metric-icon.blue { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .metric-icon.green { background: linear-gradient(135deg, #10b981, #059669); }
+        .metric-icon.orange { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .metric-icon.purple { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+        .metric-icon.cyan { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+        .metric-content { display: flex; flex-direction: column; }
+        .metric-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; }
+        .metric-value { font-size: 18px; font-weight: 700; color: #f1f5f9; }
+        .metric-unit { font-size: 11px; color: #64748b; }
+
+        .alert-banner {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.4);
+            border-radius: 6px;
+            padding: 10px 14px;
+            margin: 12px 16px;
+            display: none;
+            font-size: 12px;
+            color: #fbbf24;
+        }
+        .alert-banner.show { display: block; }
+
+        .viewer-container {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(ellipse at center, #1e293b 0%, #0f172a 100%);
+        }
+        #threejs-canvas { width: 100%; height: 100%; display: block; }
+
+        .view-buttons {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 8px;
+            background: rgba(20, 30, 48, 0.9);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(100, 150, 255, 0.2);
+        }
+        .view-btn {
+            padding: 6px 14px;
+            background: rgba(100, 150, 255, 0.1);
+            border: 1px solid rgba(100, 150, 255, 0.2);
+            border-radius: 5px;
+            color: #94a3b8;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .view-btn:hover, .view-btn.active {
+            background: rgba(59, 130, 246, 0.3);
+            color: #60a5fa;
+            border-color: #3b82f6;
+        }
+
+        .legend-box {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            background: rgba(20, 30, 48, 0.9);
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(100, 150, 255, 0.2);
+            font-size: 11px;
+        }
+        .legend-title { color: #60a5fa; font-weight: 600; margin-bottom: 6px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; color: #94a3b8; }
+        .legend-color { width: 10px; height: 10px; border-radius: 2px; }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(100, 150, 255, 0.3);
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+            max-width: 250px;
+        }
+        .tooltip-title { font-weight: 600; color: #f1f5f9; margin-bottom: 4px; }
+        .tooltip-info { color: #94a3b8; font-size: 11px; line-height: 1.5; white-space: pre-line; }
+
+        .loading-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .loading-overlay.active { opacity: 1; pointer-events: auto; }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(100, 150, 255, 0.2);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.5); }
+        ::-webkit-scrollbar-thumb { background: rgba(100, 150, 255, 0.3); border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="control-panel">
+            <div class="panel-header">
+                <h1>📦 3D 貨櫃裝載模擬系統</h1>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">貨櫃尺寸 (cm)</div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label>長度 L</label>
+                        <input type="number" id="contLength" value="1130">
+                    </div>
+                    <div class="input-group">
+                        <label>寬度 W</label>
+                        <input type="number" id="contWidth" value="230">
+                    </div>
+                    <div class="input-group">
+                        <label>高度 H</label>
+                        <input type="number" id="contHeight" value="240">
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">貨物清單</div>
+                <div class="input-group">
+                    <label>格式：名稱: 長 x 寬 x 高 x 數量</label>
+                    <textarea id="cargoInput">MB1: 203 x 158 x 173 x 1
+MB2: 242 x 176 x 188 x 1
+MD1: 324 x 197 x 222 x 1
+ME1: 91 x 98 x 143 x 2
+ME3: 86 x 92 x 82 x 1
+ME5: 139 x 157 x 152 x 1</textarea>
+                </div>
+                <button class="btn btn-secondary" onclick="parseCargo()">📋 解析貨物</button>
+            </div>
+
+            <div class="panel-section" id="settingsSection" style="display:none;">
+                <div class="section-title">貨物設定 (<span id="itemCount">0</span>件)</div>
+                <div class="select-all">
+                    <div class="checkbox-wrap">
+                        <input type="checkbox" id="allStackable" checked onchange="toggleAll('stackable')">
+                        <label for="allStackable">全部可堆疊</label>
+                    </div>
+                    <div class="checkbox-wrap">
+                        <input type="checkbox" id="allRotatable" checked onchange="toggleAll('rotatable')">
+                        <label for="allRotatable">全部可旋轉</label>
+                    </div>
+                </div>
+                <div class="cargo-settings" id="cargoList"></div>
+                <button class="btn btn-primary" onclick="calculate()">▶️ 計算裝載</button>
+                <div class="validation-box" id="validationBox">
+                    <div class="validation-title" id="valTitle"></div>
+                    <ul class="validation-list" id="valList"></ul>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">顯示選項</div>
+                <div class="display-options">
+                    <div class="checkbox-wrap">
+                        <input type="checkbox" id="showNameLabels" checked onchange="toggleLabels('name')">
+                        <label for="showNameLabels">顯示名稱標籤</label>
+                    </div>
+                    <div class="checkbox-wrap">
+                        <input type="checkbox" id="showLayerLabels" checked onchange="toggleLabels('layer')">
+                        <label for="showLayerLabels">顯示層數標籤</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">操作說明</div>
+                <div style="font-size:11px;color:#94a3b8;line-height:1.7;">
+                    <p>🖱️ 左鍵拖曳：旋轉</p>
+                    <p>🖱️ 滾輪：縮放</p>
+                    <p>🖱️ 右鍵拖曳：平移</p>
+                    <p>📦 平面堆疊（跨越多物品支撐）</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-view">
+            <div class="dashboard">
+                <div class="metric">
+                    <div class="metric-icon green">📊</div>
+                    <div class="metric-content">
+                        <span class="metric-label">空間利用率</span>
+                        <span class="metric-value" id="utilization">0<span class="metric-unit">%</span></span>
+                    </div>
+                </div>
+                <div class="metric">
+                    <div class="metric-icon blue">📦</div>
+                    <div class="metric-content">
+                        <span class="metric-label">地面層</span>
+                        <span class="metric-value" id="layer1">0<span class="metric-unit">件</span></span>
+                    </div>
+                </div>
+                <div class="metric">
+                    <div class="metric-icon orange">⬆️</div>
+                    <div class="metric-content">
+                        <span class="metric-label">堆疊</span>
+                        <span class="metric-value" id="stacked">0<span class="metric-unit">件</span></span>
+                    </div>
+                </div>
+                <div class="metric">
+                    <div class="metric-icon purple">✅</div>
+                    <div class="metric-content">
+                        <span class="metric-label">裝載</span>
+                        <span class="metric-value" id="loaded">0<span class="metric-unit">/0</span></span>
+                    </div>
+                </div>
+                <div class="metric">
+                    <div class="metric-icon cyan">🏗️</div>
+                    <div class="metric-content">
+                        <span class="metric-label">最高層數</span>
+                        <span class="metric-value" id="maxLayer">0<span class="metric-unit">層</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert-banner" id="alertBanner"></div>
+
+            <div class="viewer-container">
+                <div id="threejs-canvas"></div>
+
+                <div class="legend-box">
+                    <div class="legend-title">圖例</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#3b82f6;"></div>第1層（地面）</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#f59e0b;"></div>第2層</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#8b5cf6;"></div>第3層+</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#ef4444;"></div>未裝載</div>
+                </div>
+
+                <div class="view-buttons">
+                    <button class="view-btn active" id="btn-iso" onclick="setViewMode('iso', this)">等距</button>
+                    <button class="view-btn" id="btn-top" onclick="setViewMode('top', this)">俯視</button>
+                    <button class="view-btn" id="btn-front" onclick="setViewMode('front', this)">正視</button>
+                    <button class="view-btn" id="btn-side" onclick="setViewMode('side', this)">側視</button>
+                    <button class="view-btn" id="btn-reset" onclick="resetCameraView()">重置</button>
+                </div>
+
+                <div class="loading-overlay" id="loader"><div class="spinner"></div></div>
+                <div class="tooltip" id="tooltip">
+                    <div class="tooltip-title" id="ttTitle"></div>
+                    <div class="tooltip-info" id="ttInfo"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ========== 全域變數 ==========
+        var scene, camera, renderer;
+        var containerGroup = null;
+        var cargoMeshes = [];
+        var cargoData = [];
+        var cargoGroups = [];
+        var containerDim = { L: 1130, W: 230, H: 240 };
+        
+        var cameraDistance = 200;
+        var cameraTheta = Math.PI / 4;
+        var cameraPhi = Math.PI / 3;
+        var cameraTarget = { x: 0, y: 0, z: 0 };
+        
+        var isDragging = false;
+        var isPanning = false;
+        var lastMouseX = 0;
+        var lastMouseY = 0;
+        
+        var raycaster, mouse;
+
+        var SCALE = 0.1;
+        var COLORS_L1 = [0x3b82f6, 0x22c55e, 0x06b6d4, 0x14b8a6, 0x84cc16, 0x0ea5e9];
+        var COLORS_L2 = [0xf59e0b, 0xf97316, 0xeab308, 0xfbbf24];
+        var COLORS_L3 = [0x8b5cf6, 0xa855f7, 0xd946ef, 0xec4899];
+        var COLOR_UNLOAD = 0xef4444;
+
+        // ========== 初始化 ==========
+        function init() {
+            var canvasDiv = document.getElementById('threejs-canvas');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a);
+
+            var aspect = canvasDiv.clientWidth / canvasDiv.clientHeight;
+            camera = new THREE.PerspectiveCamera(50, aspect, 1, 5000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(canvasDiv.clientWidth, canvasDiv.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            canvasDiv.appendChild(renderer.domElement);
+
+            var ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            
+            var dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight1.position.set(100, 150, 100);
+            dirLight1.castShadow = true;
+            scene.add(dirLight1);
+            
+            var dirLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+            dirLight2.position.set(-50, 100, -50);
+            scene.add(dirLight2);
+
+            var grid = new THREE.GridHelper(300, 30, 0x2a4a6a, 0x1e3a5f);
+            grid.position.y = -0.5;
+            scene.add(grid);
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            renderer.domElement.addEventListener('mousedown', handleMouseDown, false);
+            renderer.domElement.addEventListener('mousemove', handleMouseMove, false);
+            renderer.domElement.addEventListener('mouseup', handleMouseUp, false);
+            renderer.domElement.addEventListener('mouseleave', handleMouseUp, false);
+            renderer.domElement.addEventListener('wheel', handleWheel, { passive: false });
+            renderer.domElement.addEventListener('contextmenu', function(e) { e.preventDefault(); }, false);
+            window.addEventListener('resize', handleResize, false);
+
+            createContainer();
+            resetCameraView();
+            animate();
+        }
+
+        // ========== 相機控制函數 ==========
+        function updateCameraPosition() {
+            var x = cameraDistance * Math.sin(cameraPhi) * Math.cos(cameraTheta);
+            var y = cameraDistance * Math.cos(cameraPhi);
+            var z = cameraDistance * Math.sin(cameraPhi) * Math.sin(cameraTheta);
+            
+            camera.position.set(cameraTarget.x + x, cameraTarget.y + y, cameraTarget.z + z);
+            camera.lookAt(cameraTarget.x, cameraTarget.y, cameraTarget.z);
+        }
+
+        function resetCameraView() {
+            var L = containerDim.L * SCALE;
+            var W = containerDim.W * SCALE;
+            var H = containerDim.H * SCALE;
+            
+            cameraTarget.x = L / 2;
+            cameraTarget.y = H / 3;
+            cameraTarget.z = W / 2;
+            
+            cameraDistance = Math.max(L, W, H) * 2;
+            cameraTheta = Math.PI / 4;
+            cameraPhi = Math.PI / 3;
+            
+            updateCameraPosition();
+            updateViewButtons('btn-iso');
+        }
+
+        function setViewMode(mode, btnElement) {
+            var L = containerDim.L * SCALE;
+            var W = containerDim.W * SCALE;
+            var H = containerDim.H * SCALE;
+            
+            cameraTarget.x = L / 2;
+            cameraTarget.y = H / 2;
+            cameraTarget.z = W / 2;
+            
+            switch (mode) {
+                case 'iso':
+                    cameraDistance = Math.max(L, W, H) * 2;
+                    cameraTheta = Math.PI / 4;
+                    cameraPhi = Math.PI / 3;
+                    break;
+                case 'top':
+                    cameraDistance = Math.max(L, W) * 1.8;
+                    cameraTheta = 0;
+                    cameraPhi = 0.01;
+                    break;
+                case 'front':
+                    cameraDistance = Math.max(L, H) * 1.8;
+                    cameraTheta = Math.PI / 2;
+                    cameraPhi = Math.PI / 2;
+                    break;
+                case 'side':
+                    cameraDistance = Math.max(W, H) * 3;
+                    cameraTheta = 0;
+                    cameraPhi = Math.PI / 2;
+                    break;
+            }
+            
+            updateCameraPosition();
+            updateViewButtons(btnElement ? btnElement.id : null);
+        }
+
+        function updateViewButtons(activeId) {
+            var buttons = document.querySelectorAll('.view-btn');
+            buttons.forEach(function(btn) {
+                btn.classList.remove('active');
+                if (activeId && btn.id === activeId) btn.classList.add('active');
+            });
+        }
+
+        function handleMouseDown(e) {
+            isDragging = true;
+            isPanning = (e.button === 2);
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        }
+
+        function handleMouseMove(e) {
+            var rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            if (isDragging) {
+                var deltaX = e.clientX - lastMouseX;
+                var deltaY = e.clientY - lastMouseY;
+
+                if (isPanning) {
+                    var panScale = cameraDistance * 0.001;
+                    var right = new THREE.Vector3();
+                    var up = new THREE.Vector3();
+                    camera.matrix.extractBasis(right, up, new THREE.Vector3());
+                    cameraTarget.x -= deltaX * panScale * right.x;
+                    cameraTarget.y += deltaY * panScale;
+                    cameraTarget.z -= deltaX * panScale * right.z;
+                } else {
+                    cameraTheta -= deltaX * 0.01;
+                    cameraPhi -= deltaY * 0.01;
+                    if (cameraPhi < 0.1) cameraPhi = 0.1;
+                    if (cameraPhi > Math.PI - 0.1) cameraPhi = Math.PI - 0.1;
+                }
+                
+                lastMouseX = e.clientX;
+                lastMouseY = e.clientY;
+                updateCameraPosition();
+            }
+            updateTooltip(e);
+        }
+
+        function handleMouseUp() { isDragging = false; isPanning = false; }
+
+        function handleWheel(e) {
+            e.preventDefault();
+            cameraDistance *= (e.deltaY > 0) ? 1.1 : 0.9;
+            if (cameraDistance < 30) cameraDistance = 30;
+            if (cameraDistance > 1000) cameraDistance = 1000;
+            updateCameraPosition();
+        }
+
+        function handleResize() {
+            var canvasDiv = document.getElementById('threejs-canvas');
+            camera.aspect = canvasDiv.clientWidth / canvasDiv.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvasDiv.clientWidth, canvasDiv.clientHeight);
+        }
+
+        function updateTooltip(e) {
+            raycaster.setFromCamera(mouse, camera);
+            var intersects = raycaster.intersectObjects(cargoMeshes);
+            var tooltip = document.getElementById('tooltip');
+            var rect = renderer.domElement.getBoundingClientRect();
+
+            if (intersects.length > 0) {
+                var data = intersects[0].object.userData;
+                var statusText = data.loaded ? '✅第' + data.layer + '層' : '❌未裝載';
+                document.getElementById('ttTitle').textContent = data.name + ' ' + statusText;
+                
+                var infoText = '尺寸: ' + data.length + '×' + data.width + '×' + data.height + ' cm';
+                if (data.loaded) {
+                    infoText += '\n放置: ' + data.pL.toFixed(1) + '×' + data.pW.toFixed(1) + '×' + data.pH.toFixed(1) + ' cm';
+                    infoText += '\n位置: (' + Math.round(data.x) + ', ' + Math.round(data.y) + ', ' + Math.round(data.z) + ')';
+                    if (data.rotated) infoText += '\n(已旋轉90°)';
+                    if (data.stackedOn) infoText += '\n支撐: ' + data.stackedOn;
+                }
+                document.getElementById('ttInfo').textContent = infoText;
+
+                tooltip.style.display = 'block';
+                tooltip.style.left = (e.clientX - rect.left + 15) + 'px';
+                tooltip.style.top = (e.clientY - rect.top + 15) + 'px';
+                renderer.domElement.style.cursor = 'pointer';
+            } else {
+                tooltip.style.display = 'none';
+                renderer.domElement.style.cursor = isDragging ? 'grabbing' : 'grab';
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        // ========== 創建貨櫃 ==========
+        function createContainer() {
+            if (containerGroup) scene.remove(containerGroup);
+            containerGroup = new THREE.Group();
+
+            var L = containerDim.L * SCALE;
+            var W = containerDim.W * SCALE;
+            var H = containerDim.H * SCALE;
+
+            var floorGeo = new THREE.PlaneGeometry(L, W);
+            var floorMat = new THREE.MeshPhongMaterial({ color: 0x1e3a5f, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
+            var floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(L / 2, 0, W / 2);
+            floor.receiveShadow = true;
+            containerGroup.add(floor);
+
+            var backGeo = new THREE.PlaneGeometry(L, H);
+            var backMat = new THREE.MeshPhongMaterial({ color: 0x1e3a5f, transparent: true, opacity: 0.4, side: THREE.DoubleSide });
+            var backWall = new THREE.Mesh(backGeo, backMat);
+            backWall.position.set(L / 2, H / 2, 0);
+            containerGroup.add(backWall);
+
+            var leftGeo = new THREE.PlaneGeometry(W, H);
+            var leftMat = new THREE.MeshPhongMaterial({ color: 0x1e3a5f, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
+            var leftWall = new THREE.Mesh(leftGeo, leftMat);
+            leftWall.rotation.y = Math.PI / 2;
+            leftWall.position.set(0, H / 2, W / 2);
+            containerGroup.add(leftWall);
+
+            var lineMat = new THREE.LineBasicMaterial({ color: 0x60a5fa });
+            var edges = [
+                [[0,0,0], [L,0,0]], [[L,0,0], [L,0,W]], [[L,0,W], [0,0,W]], [[0,0,W], [0,0,0]],
+                [[0,H,0], [L,H,0]], [[L,H,0], [L,H,W]], [[L,H,W], [0,H,W]], [[0,H,W], [0,H,0]],
+                [[0,0,0], [0,H,0]], [[L,0,0], [L,H,0]], [[L,0,W], [L,H,W]], [[0,0,W], [0,H,W]]
+            ];
+            
+            for (var i = 0; i < edges.length; i++) {
+                var edge = edges[i];
+                var points = [new THREE.Vector3(edge[0][0], edge[0][1], edge[0][2]), new THREE.Vector3(edge[1][0], edge[1][1], edge[1][2])];
+                var lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                containerGroup.add(new THREE.Line(lineGeo, lineMat));
+            }
+
+            addDimensionLabel(containerDim.L + 'cm', L / 2, 0, W + 8);
+            addDimensionLabel(containerDim.W + 'cm', -8, 0, W / 2);
+            addDimensionLabel(containerDim.H + 'cm', -8, H / 2, 0);
+
+            scene.add(containerGroup);
+        }
+
+        function addDimensionLabel(text, x, y, z) {
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            canvas.width = 128; canvas.height = 64;
+            ctx.fillStyle = 'rgba(15,23,42,0.8)';
+            ctx.fillRect(0, 0, 128, 64);
+            ctx.font = 'bold 24px Arial';
+            ctx.fillStyle = '#60a5fa';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 64, 32);
+            
+            var texture = new THREE.CanvasTexture(canvas);
+            var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
+            sprite.position.set(x, y, z);
+            sprite.scale.set(10, 5, 1);
+            containerGroup.add(sprite);
+        }
+
+        function createNameLabel(text, isUnloaded) {
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            ctx.font = 'bold 32px Arial';
+            var textWidth = ctx.measureText(text).width;
+            var padding = 16;
+            canvas.width = textWidth + padding * 2;
+            canvas.height = 48;
+            
+            ctx.fillStyle = isUnloaded ? 'rgba(239, 68, 68, 0.9)' : 'rgba(30, 41, 59, 0.9)';
+            ctx.roundRect(0, 0, canvas.width, canvas.height, 8);
+            ctx.fill();
+            ctx.strokeStyle = isUnloaded ? '#ef4444' : '#3b82f6';
+            ctx.lineWidth = 2;
+            ctx.roundRect(0, 0, canvas.width, canvas.height, 8);
+            ctx.stroke();
+            ctx.font = 'bold 32px Arial';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            
+            var texture = new THREE.CanvasTexture(canvas);
+            var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false }));
+            sprite.scale.set((textWidth + padding * 2) * 0.08, 4, 1);
+            return sprite;
+        }
+
+        // ========== 解析貨物 ==========
+        function parseCargo() {
+            var input = document.getElementById('cargoInput').value;
+            cargoData = [];
+            cargoGroups = [];
+
+            var lines = input.trim().split('\n');
+            var itemId = 0;
+            
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i];
+                var match = line.match(/([^:：]+)[:\：]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(?:[xX×]\s*(\d+))?/);
+                if (match) {
+                    var baseName = match[1].trim();
+                    var length = parseFloat(match[2]);
+                    var width = parseFloat(match[3]);
+                    var height = parseFloat(match[4]);
+                    var quantity = match[5] ? parseInt(match[5]) : 1;
+                    
+                    cargoGroups.push({
+                        baseName: baseName, length: length, width: width, height: height,
+                        quantity: quantity, stackable: true, rotatable: true, groupId: i
+                    });
+                    
+                    for (var q = 0; q < quantity; q++) {
+                        var itemName = quantity > 1 ? (baseName + '-' + (q + 1)) : baseName;
+                        cargoData.push({
+                            id: itemId++, name: itemName, baseName: baseName,
+                            length: length, width: width, height: height,
+                            stackable: true, rotatable: true, groupId: i
+                        });
+                    }
+                }
+            }
+
+            if (cargoData.length === 0) {
+                alert('請輸入有效的貨物資訊\n格式：名稱: 長 x 寬 x 高 x 數量');
+                return;
+            }
+
+            renderCargoList();
+            document.getElementById('settingsSection').style.display = 'block';
+            document.getElementById('itemCount').textContent = cargoData.length;
+        }
+
+        function renderCargoList() {
+            var list = document.getElementById('cargoList');
+            list.innerHTML = '';
+            
+            for (var i = 0; i < cargoGroups.length; i++) {
+                var g = cargoGroups[i];
+                var color = COLORS_L1[i % COLORS_L1.length];
+                var colorHex = '#' + color.toString(16).padStart(6, '0');
+                
+                var div = document.createElement('div');
+                div.className = 'cargo-item';
+                div.innerHTML = 
+                    '<div class="cargo-info"><div class="cargo-color" style="background:' + colorHex + '"></div><div>' +
+                    '<div class="cargo-name">' + g.baseName + (g.quantity > 1 ? '<span class="cargo-qty">×' + g.quantity + '</span>' : '') + '</div>' +
+                    '<div class="cargo-size">' + g.length + '×' + g.width + '×' + g.height + '</div></div></div>' +
+                    '<div class="cargo-options">' +
+                    '<div class="checkbox-wrap"><input type="checkbox" id="s' + g.groupId + '" ' + (g.stackable ? 'checked' : '') + ' onchange="updateGroupOpt(' + g.groupId + ',\'stackable\')"><label for="s' + g.groupId + '">堆疊</label></div>' +
+                    '<div class="checkbox-wrap"><input type="checkbox" id="r' + g.groupId + '" ' + (g.rotatable ? 'checked' : '') + ' onchange="updateGroupOpt(' + g.groupId + ',\'rotatable\')"><label for="r' + g.groupId + '">旋轉</label></div></div>';
+                list.appendChild(div);
+            }
+        }
+
+        function updateGroupOpt(groupId, prop) {
+            for (var i = 0; i < cargoGroups.length; i++) {
+                if (cargoGroups[i].groupId === groupId) {
+                    var checkboxId = (prop === 'stackable' ? 's' : 'r') + groupId;
+                    cargoGroups[i][prop] = document.getElementById(checkboxId).checked;
+                    break;
+                }
+            }
+            for (var i = 0; i < cargoData.length; i++) {
+                if (cargoData[i].groupId === groupId) {
+                    cargoData[i][prop] = cargoGroups.find(function(g) { return g.groupId === groupId; })[prop];
+                }
+            }
+            syncSelectAll();
+        }
+
+        function toggleAll(prop) {
+            var val = document.getElementById((prop === 'stackable') ? 'allStackable' : 'allRotatable').checked;
+            for (var i = 0; i < cargoGroups.length; i++) {
+                cargoGroups[i][prop] = val;
+                var el = document.getElementById((prop === 'stackable' ? 's' : 'r') + cargoGroups[i].groupId);
+                if (el) el.checked = val;
+            }
+            for (var i = 0; i < cargoData.length; i++) cargoData[i][prop] = val;
+        }
+
+        function syncSelectAll() {
+            var allStackable = true, allRotatable = true;
+            for (var i = 0; i < cargoGroups.length; i++) {
+                if (!cargoGroups[i].stackable) allStackable = false;
+                if (!cargoGroups[i].rotatable) allRotatable = false;
+            }
+            document.getElementById('allStackable').checked = allStackable;
+            document.getElementById('allRotatable').checked = allRotatable;
+        }
+
+        // ========== 平面堆疊演算法 ==========
+        function calculate() {
+            if (cargoData.length === 0) {
+                parseCargo();
+                if (cargoData.length === 0) return;
+            }
+
+            document.getElementById('loader').classList.add('active');
+
+            setTimeout(function() {
+                containerDim.L = parseFloat(document.getElementById('contLength').value) || 1130;
+                containerDim.W = parseFloat(document.getElementById('contWidth').value) || 230;
+                containerDim.H = parseFloat(document.getElementById('contHeight').value) || 240;
+
+                for (var i = 0; i < cargoMeshes.length; i++) containerGroup.remove(cargoMeshes[i]);
+                cargoMeshes = [];
+                createContainer();
+
+                var result = packItemsPlatformStrategy(cargoData, containerDim.L, containerDim.W, containerDim.H);
+                
+                var colorIdx = { l1: 0, l2: 0, l3: 0, unload: 0 };
+                for (var i = 0; i < result.length; i++) {
+                    var item = result[i];
+                    var mesh = createCargoMesh(item, colorIdx);
+                    containerGroup.add(mesh);
+                    cargoMeshes.push(mesh);
+                    if (item.loaded) {
+                        if (item.layer === 1) colorIdx.l1++;
+                        else if (item.layer === 2) colorIdx.l2++;
+                        else colorIdx.l3++;
+                    } else colorIdx.unload++;
+                }
+
+                var l1Count = 0, stackedCount = 0, unloadCount = 0, totalVolume = 0, maxLayer = 0;
+                for (var i = 0; i < result.length; i++) {
+                    if (result[i].loaded) {
+                        totalVolume += result[i].pL * result[i].pW * result[i].pH;
+                        if (result[i].layer === 1) l1Count++;
+                        else stackedCount++;
+                        if (result[i].layer > maxLayer) maxLayer = result[i].layer;
+                    } else unloadCount++;
+                }
+                
+                var containerVolume = containerDim.L * containerDim.W * containerDim.H;
+                var util = Math.round(totalVolume / containerVolume * 100);
+
+                document.getElementById('utilization').innerHTML = util + '<span class="metric-unit">%</span>';
+                document.getElementById('layer1').innerHTML = l1Count + '<span class="metric-unit">件</span>';
+                document.getElementById('stacked').innerHTML = stackedCount + '<span class="metric-unit">件</span>';
+                document.getElementById('loaded').innerHTML = (l1Count + stackedCount) + '<span class="metric-unit">/' + cargoData.length + '</span>';
+                document.getElementById('maxLayer').innerHTML = maxLayer + '<span class="metric-unit">層</span>';
+
+                var validation = validateResult(result);
+                showValidation(validation);
+                showAlert(stackedCount, unloadCount, validation);
+
+                resetCameraView();
+                document.getElementById('loader').classList.remove('active');
+            }, 200);
+        }
+
+        // 3D方塊重疊檢查
+        function boxesOverlap(a, b) {
+            var eps = 0.1;
+            return (a.x < b.x + b.pL - eps) && (a.x + a.pL > b.x + eps) &&
+                   (a.y < b.y + b.pH - eps) && (a.y + a.pH > b.y + eps) &&
+                   (a.z < b.z + b.pW - eps) && (a.z + a.pW > b.z + eps);
+        }
+
+        // 2D矩形重疊檢查
+        function rectsOverlap(x1, z1, l1, w1, x2, z2, l2, w2) {
+            return x1 < x2 + l2 && x1 + l1 > x2 && z1 < z2 + w2 && z1 + w1 > z2;
+        }
+
+        // 檢查位置是否與已放置物品重疊
+        function checkPositionOverlap(newItem, placedItems) {
+            for (var i = 0; i < placedItems.length; i++) {
+                if (boxesOverlap(newItem, placedItems[i])) return true;
+            }
+            return false;
+        }
+
+        // 檢查物品底部是否被完全支撐（可跨越多個同高度物品）
+        function isFullySupported(x, z, l, w, baseHeight, baseItems, checkSize) {
+            // 檢查四個角落
+            var corners = [
+                { x: x + 0.5, z: z + 0.5 },
+                { x: x + l - 0.5, z: z + 0.5 },
+                { x: x + 0.5, z: z + w - 0.5 },
+                { x: x + l - 0.5, z: z + w - 0.5 }
+            ];
+            
+            for (var ci = 0; ci < corners.length; ci++) {
+                var c = corners[ci];
+                var supported = false;
+                for (var bi = 0; bi < baseItems.length; bi++) {
+                    var base = baseItems[bi];
+                    if (c.x >= base.x && c.x <= base.x + base.pL &&
+                        c.z >= base.z && c.z <= base.z + base.pW) {
+                        supported = true;
+                        break;
+                    }
+                }
+                if (!supported) return false;
+            }
+            
+            // 檢查網格點
+            for (var cx = x + checkSize; cx < x + l - checkSize; cx += checkSize) {
+                for (var cz = z + checkSize; cz < z + w - checkSize; cz += checkSize) {
+                    var supported = false;
+                    for (var bi = 0; bi < baseItems.length; bi++) {
+                        var base = baseItems[bi];
+                        if (cx >= base.x && cx <= base.x + base.pL &&
+                            cz >= base.z && cz <= base.z + base.pW) {
+                            supported = true;
+                            break;
+                        }
+                    }
+                    if (!supported) return false;
+                }
+            }
+            
+            return true;
+        }
+
+        // 找出支撐物品
+        function findSupportingItems(x, z, l, w, baseItems) {
+            var supports = [];
+            for (var bi = 0; bi < baseItems.length; bi++) {
+                var base = baseItems[bi];
+                if (rectsOverlap(x, z, l, w, base.x, base.z, base.pL, base.pW)) {
+                    supports.push(base);
+                }
+            }
+            return supports;
+        }
+
+        // 平面堆疊策略
+        function packItemsPlatformStrategy(items, contL, contW, contH) {
+            var placements = [];
+            var placedItems = [];
+            
+            // 複製並按面積排序（大的優先放地面）
+            var sorted = items.slice().sort(function(a, b) {
+                return (b.length * b.width) - (a.length * a.width);
+            });
+            
+            // 為每個物品創建放置記錄
+            for (var i = 0; i < sorted.length; i++) {
+                placements.push({
+                    id: sorted[i].id,
+                    name: sorted[i].name,
+                    baseName: sorted[i].baseName,
+                    length: sorted[i].length,
+                    width: sorted[i].width,
+                    height: sorted[i].height,
+                    stackable: sorted[i].stackable,
+                    rotatable: sorted[i].rotatable,
+                    groupId: sorted[i].groupId,
+                    x: -1, z: -1, y: -1,
+                    pL: sorted[i].length, pW: sorted[i].width, pH: sorted[i].height,
+                    rotated: false, layer: 0, stackedOn: null, loaded: false
+                });
+            }
+            
+            // 第一階段：地面放置
+            var spaces = [{ x: 0, z: 0, l: contL, w: contW }];
+            
+            for (var i = 0; i < placements.length; i++) {
+                var item = placements[i];
+                var placed = false;
+                
+                var orients = item.rotatable
+                    ? [{ l: item.length, w: item.width }, { l: item.width, w: item.length }]
+                    : [{ l: item.length, w: item.width }];
+                
+                for (var oi = 0; oi < orients.length && !placed; oi++) {
+                    var o = orients[oi];
+                    
+                    for (var si = 0; si < spaces.length && !placed; si++) {
+                        var sp = spaces[si];
+                        
+                        if (o.l <= sp.l + 0.1 && o.w <= sp.w + 0.1 && item.height <= contH) {
+                            item.x = sp.x;
+                            item.z = sp.z;
+                            item.y = 0;
+                            item.pL = o.l;
+                            item.pW = o.w;
+                            item.pH = item.height;
+                            item.rotated = (o.l !== item.length);
+                            item.layer = 1;
+                            item.loaded = true;
+                            placedItems.push(item);
+                            
+                            // 分割空間
+                            var newSpaces = [];
+                            if (sp.l - o.l > 5) {
+                                newSpaces.push({ x: sp.x + o.l, z: sp.z, l: sp.l - o.l, w: sp.w });
+                            }
+                            if (sp.w - o.w > 5) {
+                                newSpaces.push({ x: sp.x, z: sp.z + o.w, l: o.l, w: sp.w - o.w });
+                            }
+                            spaces.splice(si, 1);
+                            for (var ni = 0; ni < newSpaces.length; ni++) spaces.push(newSpaces[ni]);
+                            placed = true;
+                        }
+                    }
+                }
+            }
+            
+            // 第二階段：多層堆疊（平面策略）
+            var maxIterations = 1000;
+            var scanStep = 10; // 掃描步長
+            
+            for (var iter = 0; iter < maxIterations; iter++) {
+                var placedThisRound = false;
+                
+                // 收集未放置物品
+                var unplacedItems = [];
+                for (var i = 0; i < placements.length; i++) {
+                    if (!placements[i].loaded) unplacedItems.push(placements[i]);
+                }
+                if (unplacedItems.length === 0) break;
+                
+                // 按體積排序（小的優先）
+                unplacedItems.sort(function(a, b) {
+                    return (a.length * a.width * a.height) - (b.length * b.width * b.height);
+                });
+                
+                // 找出所有唯一高度層級
+                var heightLevels = [];
+                for (var i = 0; i < placedItems.length; i++) {
+                    var topY = Math.round((placedItems[i].y + placedItems[i].pH) * 10) / 10;
+                    var found = false;
+                    for (var j = 0; j < heightLevels.length; j++) {
+                        if (Math.abs(heightLevels[j] - topY) < 0.5) { found = true; break; }
+                    }
+                    if (!found) heightLevels.push(topY);
+                }
+                heightLevels.sort(function(a, b) { return a - b; });
+                
+                // 嘗試放置每個未放置物品
+                for (var ui = 0; ui < unplacedItems.length && !placedThisRound; ui++) {
+                    var item = unplacedItems[ui];
+                    
+                    // 對每個高度層級嘗試
+                    for (var hi = 0; hi < heightLevels.length && !placedThisRound; hi++) {
+                        var h = heightLevels[hi];
+                        if (h + item.height > contH) continue;
+                        
+                        // 找出頂部在這個高度的所有可堆疊物品
+                        var baseItemsAtHeight = [];
+                        for (var pi = 0; pi < placedItems.length; pi++) {
+                            var p = placedItems[pi];
+                            var pTop = Math.round((p.y + p.pH) * 10) / 10;
+                            if (Math.abs(pTop - h) < 0.5 && p.stackable) {
+                                baseItemsAtHeight.push(p);
+                            }
+                        }
+                        if (baseItemsAtHeight.length === 0) continue;
+                        
+                        // 嘗試不同方向
+                        var orients = item.rotatable
+                            ? [{ l: item.length, w: item.width }, { l: item.width, w: item.length }]
+                            : [{ l: item.length, w: item.width }];
+                        
+                        for (var oi = 0; oi < orients.length && !placedThisRound; oi++) {
+                            var o = orients[oi];
+                            
+                            // 方法1：嘗試放在單一物品上（優先，更穩定）
+                            for (var bi = 0; bi < baseItemsAtHeight.length && !placedThisRound; bi++) {
+                                var base = baseItemsAtHeight[bi];
+                                
+                                if (o.l <= base.pL + 0.1 && o.w <= base.pW + 0.1) {
+                                    var newX = base.x + (base.pL - o.l) / 2;
+                                    var newZ = base.z + (base.pW - o.w) / 2;
+                                    
+                                    var tempItem = { x: newX, y: h, z: newZ, pL: o.l, pH: item.height, pW: o.w };
+                                    
+                                    if (!checkPositionOverlap(tempItem, placedItems)) {
+                                        item.x = newX;
+                                        item.y = h;
+                                        item.z = newZ;
+                                        item.pL = o.l;
+                                        item.pW = o.w;
+                                        item.pH = item.height;
+                                        item.rotated = (o.l !== item.length);
+                                        item.layer = base.layer + 1;
+                                        item.stackedOn = base.name;
+                                        item.loaded = true;
+                                        placedItems.push(item);
+                                        placedThisRound = true;
+                                    }
+                                }
+                            }
+                            
+                            // 方法2：掃描整個平面找可放置位置（跨越多物品）
+                            if (!placedThisRound) {
+                                for (var scanX = 0; scanX <= contL - o.l && !placedThisRound; scanX += scanStep) {
+                                    for (var scanZ = 0; scanZ <= contW - o.w && !placedThisRound; scanZ += scanStep) {
+                                        // 檢查是否完全被支撐
+                                        if (isFullySupported(scanX, scanZ, o.l, o.w, h, baseItemsAtHeight, Math.min(o.l, o.w) / 3)) {
+                                            var tempItem = { x: scanX, y: h, z: scanZ, pL: o.l, pH: item.height, pW: o.w };
+                                            
+                                            if (!checkPositionOverlap(tempItem, placedItems)) {
+                                                // 找出支撐物品
+                                                var supports = findSupportingItems(scanX, scanZ, o.l, o.w, baseItemsAtHeight);
+                                                var maxBaseLayer = 0;
+                                                var supportNames = [];
+                                                for (var si = 0; si < supports.length; si++) {
+                                                    if (supports[si].layer > maxBaseLayer) maxBaseLayer = supports[si].layer;
+                                                    if (supportNames.length < 3) supportNames.push(supports[si].name);
+                                                }
+                                                
+                                                item.x = scanX;
+                                                item.y = h;
+                                                item.z = scanZ;
+                                                item.pL = o.l;
+                                                item.pW = o.w;
+                                                item.pH = item.height;
+                                                item.rotated = (o.l !== item.length);
+                                                item.layer = maxBaseLayer + 1;
+                                                item.stackedOn = supportNames.join(', ') + (supports.length > 3 ? '...' : '');
+                                                item.loaded = true;
+                                                placedItems.push(item);
+                                                placedThisRound = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (!placedThisRound) break;
+            }
+            
+            return placements;
+        }
+
+        function validateResult(placements) {
+            var results = [];
+            var loadedItems = [], unloadItems = [];
+            
+            for (var i = 0; i < placements.length; i++) {
+                if (placements[i].loaded) loadedItems.push(placements[i]);
+                else unloadItems.push(placements[i]);
+            }
+
+            for (var i = 0; i < loadedItems.length; i++) {
+                var p = loadedItems[i];
+                if (p.x + p.pL > containerDim.L + 1) results.push({ type: 'error', msg: p.name + ' 超出長度' });
+                if (p.z + p.pW > containerDim.W + 1) results.push({ type: 'error', msg: p.name + ' 超出寬度' });
+                if (p.y + p.pH > containerDim.H + 1) results.push({ type: 'error', msg: p.name + ' 超出高度' });
+            }
+
+            for (var i = 0; i < loadedItems.length; i++) {
+                for (var j = i + 1; j < loadedItems.length; j++) {
+                    if (boxesOverlap(loadedItems[i], loadedItems[j])) {
+                        results.push({ type: 'error', msg: loadedItems[i].name + ' 與 ' + loadedItems[j].name + ' 重疊' });
+                    }
+                }
+            }
+
+            if (unloadItems.length > 0) results.push({ type: 'warning', msg: unloadItems.length + '件無法裝載' });
+            
+            var hasError = false;
+            for (var i = 0; i < results.length; i++) if (results[i].type === 'error') { hasError = true; break; }
+            if (!hasError) results.push({ type: 'success', msg: '配置驗證通過' });
+
+            return results;
+        }
+
+        function showValidation(results) {
+            var box = document.getElementById('validationBox');
+            var errorCount = 0, warningCount = 0;
+            for (var i = 0; i < results.length; i++) {
+                if (results[i].type === 'error') errorCount++;
+                if (results[i].type === 'warning') warningCount++;
+            }
+
+            if (errorCount > 0) {
+                box.className = 'validation-box show error';
+                document.getElementById('valTitle').textContent = '❌ ' + errorCount + '個錯誤';
+            } else if (warningCount > 0) {
+                box.className = 'validation-box show warning';
+                document.getElementById('valTitle').textContent = '⚠️ ' + warningCount + '個警告';
+            } else {
+                box.className = 'validation-box show success';
+                document.getElementById('valTitle').textContent = '✅ 驗證通過';
+            }
+
+            var listHtml = '';
+            for (var i = 0; i < results.length; i++) listHtml += '<li>' + results[i].msg + '</li>';
+            document.getElementById('valList').innerHTML = listHtml;
+        }
+
+        function showAlert(stackedCount, unloadCount, validation) {
+            var banner = document.getElementById('alertBanner');
+            var hasError = false;
+            for (var i = 0; i < validation.length; i++) if (validation[i].type === 'error') { hasError = true; break; }
+
+            if (stackedCount > 0 || unloadCount > 0 || hasError) {
+                var msgs = [];
+                if (stackedCount > 0) msgs.push(stackedCount + '件堆疊');
+                if (unloadCount > 0) msgs.push(unloadCount + '件未裝載');
+                if (hasError) msgs.push('有配置錯誤');
+                banner.textContent = '⚠️ ' + msgs.join('，');
+                banner.classList.add('show');
+            } else banner.classList.remove('show');
+        }
+
+        function createCargoMesh(item, colorIdx) {
+            var L = item.pL * SCALE;
+            var W = item.pW * SCALE;
+            var H = item.pH * SCALE;
+
+            var color;
+            if (!item.loaded) color = COLOR_UNLOAD;
+            else if (item.layer === 1) color = COLORS_L1[colorIdx.l1 % COLORS_L1.length];
+            else if (item.layer === 2) color = COLORS_L2[colorIdx.l2 % COLORS_L2.length];
+            else color = COLORS_L3[colorIdx.l3 % COLORS_L3.length];
+
+            var geometry = new THREE.BoxGeometry(L, H, W);
+            var material = new THREE.MeshPhongMaterial({ color: color, transparent: true, opacity: item.loaded ? 0.85 : 0.5 });
+            var mesh = new THREE.Mesh(geometry, material);
+
+            if (item.loaded) {
+                mesh.position.set(item.x * SCALE + L / 2, item.y * SCALE + H / 2, item.z * SCALE + W / 2);
+            } else {
+                mesh.position.set(-12 - colorIdx.unload * 10, H / 2, containerDim.W * SCALE / 2);
+            }
+
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+
+            mesh.userData = {
+                name: item.name, length: item.length, width: item.width, height: item.height,
+                x: item.x, y: item.y, z: item.z, pL: item.pL, pW: item.pW, pH: item.pH,
+                rotated: item.rotated, layer: item.layer, stackedOn: item.stackedOn, loaded: item.loaded,
+                nameLabel: null, layerLabel: null
+            };
+
+            var edges = new THREE.EdgesGeometry(geometry);
+            mesh.add(new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0xffffff })));
+
+            var nameLabel = createNameLabel(item.name, !item.loaded);
+            nameLabel.position.set(0, H / 2 + 2.5, 0);
+            nameLabel.visible = document.getElementById('showNameLabels').checked;
+            mesh.add(nameLabel);
+            mesh.userData.nameLabel = nameLabel;
+
+            if (item.loaded && item.layer >= 2) {
+                var layerLabel = createLayerLabel(item.layer.toString());
+                layerLabel.position.set(0, H / 2 + 6, 0);
+                layerLabel.visible = document.getElementById('showLayerLabels').checked;
+                mesh.add(layerLabel);
+                mesh.userData.layerLabel = layerLabel;
+            }
+
+            return mesh;
+        }
+
+        function createLayerLabel(text) {
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            canvas.width = 64; canvas.height = 64;
+            
+            var layerNum = parseInt(text);
+            ctx.fillStyle = layerNum === 2 ? '#f59e0b' : '#8b5cf6';
+            ctx.beginPath();
+            ctx.arc(32, 32, 26, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 28px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('L' + text, 32, 34);
+            
+            var texture = new THREE.CanvasTexture(canvas);
+            var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
+            sprite.scale.set(5, 5, 1);
+            return sprite;
+        }
+
+        function toggleLabels(type) {
+            var showName = document.getElementById('showNameLabels').checked;
+            var showLayer = document.getElementById('showLayerLabels').checked;
+            
+            for (var i = 0; i < cargoMeshes.length; i++) {
+                var mesh = cargoMeshes[i];
+                if (type === 'name' && mesh.userData.nameLabel) {
+                    mesh.userData.nameLabel.visible = showName;
+                }
+                if (type === 'layer' && mesh.userData.layerLabel) {
+                    mesh.userData.layerLabel.visible = showLayer;
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            init();
+            setTimeout(function() { parseCargo(); calculate(); }, 300);
+        });
+    </script>
+</body>
+</html>
