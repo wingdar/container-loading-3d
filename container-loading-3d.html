@@ -306,6 +306,65 @@
             font-weight: 600;
         }
 
+        .result-summary .rec {
+            color: #276749;
+            font-weight: 600;
+        }
+
+        .result-summary .detail {
+            color: #718096;
+            padding-left: 1.5em;
+        }
+
+        /* 每個載具的「#N x件 y%」不可被拆行 */
+        .result-summary .detail em {
+            display: inline-block;
+            white-space: nowrap;
+            margin-right: 0.7em;
+            font-style: normal;
+        }
+
+        .result-summary .row {
+            margin-top: 6px;
+        }
+
+        .carrier-opt {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #4a5568;
+        }
+
+        .carrier-opt input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .carrier-opt .carrier-name {
+            flex: 1;
+            min-width: 0;
+            cursor: pointer;
+        }
+
+        .carrier-opt input[type="number"] {
+            width: 56px;
+            padding: 5px 6px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .field-hint {
+            font-size: 11px;
+            color: #718096;
+            font-weight: normal;
+        }
+
         .viewer-container {
             background: white;
             border-radius: 12px;
@@ -549,6 +608,36 @@
                 </div>
 
                 <div class="panel-section">
+                    <h3>多載具配載</h3>
+                    <div class="carrier-opt">
+                        <input type="checkbox" id="carrierUse1" checked>
+                        <label class="carrier-name" for="carrierUse1">棧板 A</label>
+                        <input type="number" id="carrierL1" value="120" min="1">
+                        <span>×</span>
+                        <input type="number" id="carrierW1" value="100" min="1">
+                    </div>
+                    <div class="carrier-opt">
+                        <input type="checkbox" id="carrierUse2" checked>
+                        <label class="carrier-name" for="carrierUse2">棧板 B</label>
+                        <input type="number" id="carrierL2" value="120" min="1">
+                        <span>×</span>
+                        <input type="number" id="carrierW2" value="80" min="1">
+                    </div>
+                    <div class="carrier-opt">
+                        <input type="checkbox" id="carrierUseCont">
+                        <label class="carrier-name" for="carrierUseCont">上方貨櫃尺寸（用它自己的高度）</label>
+                    </div>
+                    <div class="input-group">
+                        <label>堆貨高度 (cm)
+                            <span class="field-hint">棧板本身 12.5 cm 未計入</span>
+                        </label>
+                        <input type="number" id="carrierHeight" min="1" placeholder="依客需 / 海空運自行輸入">
+                    </div>
+                    <button class="btn btn-secondary" onclick="calculateMultiCarrier()">🧮 計算整票貨需要幾個載具</button>
+                    <div id="carrierResult" class="result-summary"></div>
+                </div>
+
+                <div class="panel-section">
                     <h3>快速範例</h3>
                     <button class="btn btn-example" onclick="loadExample()">載入範例數據</button>
                 </div>
@@ -578,6 +667,18 @@ const SUPPORT_RATIO = 0.7;  // 貨物底面積至少需被下方支撐的比例
 const FLOOR_T = 5;          // 貨櫃底板顯示厚度 (cm)
 const MAX_PIECES = 1500;    // 展開後的貨物件數上限，避免瀏覽器凍結
 const GRID_CAP = 10000;     // 候選欄位網格上限，超過時退回箱角欄位以免凍結
+const PALLET_DECK_H = 12.5; // 棧板本身高度 (cm)，僅供提示文字，不計入堆貨高度
+
+// 裝載策略。貪婪法對「先填哪個軸」與「先試哪個方位」極度敏感：單一策略會讓
+// 120×100 與 100×120 這種物理上等價的問題算出不同件數（實測 12 vs 18）。
+// 這 4 個策略在 x↔z 對調下兩兩互為配對（0↔3、1↔2），構成封閉集合，
+// 因此取「件數最多者」可讓長寬對調的答案必然一致（貨物可旋轉時）。
+const PACK_STRATEGIES = [
+    { zFirst: false, rotFirst: false },   // 原始行為：x 軸優先、非旋轉方位優先
+    { zFirst: false, rotFirst: true  },
+    { zFirst: true,  rotFirst: false },
+    { zFirst: true,  rotFirst: true  }
+];
 
 const CONTAINER_PRESETS = {
     '20gp': { length: 589,  width: 235, height: 239 },
@@ -610,6 +711,7 @@ let nextCargoId = 1;
 let lastResult = null;   // 最近一次 packCargo 的結果；貨物或貨櫃被修改時設回 null
 let evalPlaced = [];     // 「剩餘空間快速評估」目前顯示的金色預覽箱（計入頂部統計）
 let containerSize = { length: 1203, width: 235, height: 239 };
+let framedSize = null;   // 上次自動取景時的載具尺寸；用來判斷該不該重新取景
 
 // ============================================================
 // 裝載演算法（純函式，不碰 DOM / THREE）
@@ -703,6 +805,7 @@ function buildColumns(placed, cont) {
 function packCargo(items, cont, opts = {}) {
     const placed = [];
     const unplaced = [];
+    const st = opts.strategy || PACK_STRATEGIES[0];
 
     const sorted = opts.sortByVolume === false
         ? [...items]
@@ -711,7 +814,7 @@ function packCargo(items, cont, opts = {}) {
             (b.height - a.height));
 
     for (const item of sorted) {
-        const box = findBestPlacement(item, placed, cont);
+        const box = findBestPlacement(item, placed, cont, st);
         if (box) {
             placed.push(box);
         } else {
@@ -722,13 +825,37 @@ function packCargo(items, cont, opts = {}) {
     return { placed, unplaced };
 }
 
+// 跑遍 PACK_STRATEGIES 取裝載件數最多者。這是「長寬對調結果必須一致」的實作核心，
+// 回傳值多帶 strategy 供 packCargoSpread 沿用（見該函式的效能註解）。
+function packCargoBest(items, cont, opts = {}) {
+    let best = null;
+    for (const st of PACK_STRATEGIES) {
+        const r = packCargo(items, cont, { ...opts, strategy: st });
+        if (!best || r.placed.length > best.placed.length) {
+            best = { placed: r.placed, unplaced: r.unplaced, strategy: st };
+        }
+    }
+    return best;
+}
+
+// 位置優劣：依策略決定先比 x 還是 z，最後比 y。
+// y 排最後即「同一直柱疊滿才換位置」，同型貨物自然形成直柱而非打平分層。
+function betterSpot(a, b, st) {
+    const [a1, a2] = st.zFirst ? [a.z, a.x] : [a.x, a.z];
+    const [b1, b2] = st.zFirst ? [b.z, b.x] : [b.x, b.z];
+    if (Math.abs(a1 - b1) > EPS) return a1 < b1;
+    if (Math.abs(a2 - b2) > EPS) return a2 < b2;
+    return a.y < b.y - EPS;
+}
+
 // 為單一貨物尋找最佳放置位置（不修改 placed）；找不到回傳 null。
 // 「剩餘空間快速評估」也直接以既有 placed 狀態呼叫此函式逐件試放。
-function findBestPlacement(item, placed, cont) {
+function findBestPlacement(item, placed, cont, st = PACK_STRATEGIES[0]) {
     const orientations = [{ l: item.length, w: item.width, rotated: false }];
     if (item.rotatable && Math.abs(item.length - item.width) > EPS) {
         orientations.push({ l: item.width, w: item.length, rotated: true });
     }
+    if (st.rotFirst) orientations.reverse();
 
     const columns = buildColumns(placed, cont);
     let best = null;
@@ -741,13 +868,9 @@ function findBestPlacement(item, placed, cont) {
             const y = footprintRestingHeight(c.x, c.z, o.l, o.w, placed);
             if (y + item.height > cont.height + EPS) continue;
 
-            // 分數比較先於支撐檢查，省掉不會勝出的候選；同分時保留先出現者（非旋轉優先）
-            if (best) {
-                const better = c.x < best.x - EPS ||
-                    (Math.abs(c.x - best.x) <= EPS && (c.z < best.z - EPS ||
-                    (Math.abs(c.z - best.z) <= EPS && y < best.y - EPS)));
-                if (!better) continue;
-            }
+            // 分數比較先於支撐檢查，省掉不會勝出的候選；同分時保留先出現者
+            const spot = { x: c.x, y: y, z: c.z };
+            if (best && !betterSpot(spot, best, st)) continue;
 
             const box = { x: c.x, y: y, z: c.z, l: o.l, h: item.height, w: o.w, stackable: item.stackable };
             if (!isSupported(box, placed)) continue;
@@ -805,10 +928,15 @@ function reachableStackHeights(items, maxHeight, maxCaps) {
 // 但同樣取最佳觀察值，件數保證不少於滿高度基準）。
 // 回傳 { placed, unplaced, heightCap }
 function packCargoSpread(items, cont, opts = {}) {
-    const base = packCargo(items, cont, opts);
+    const base = packCargoBest(items, cont, opts);
     if (base.placed.length === 0) {
         return { placed: base.placed, unplaced: base.unplaced, heightCap: cont.height };
     }
+
+    // 高度上限掃描沿用 base 選出的那一個策略。若每個上限都重跑 4 策略，
+    // 最壞情況（25 個上限 × 4 策略）會讓大批貨算到瀏覽器凍結（實測 1500 件約 68 秒）。
+    // 候選高度集合只由貨物高度決定、與 L/W 無關，因此長寬對調的對稱性仍然成立。
+    const capOpts = { ...opts, strategy: base.strategy };
 
     let caps = reachableStackHeights(items, cont.height, 24);
     if (caps.length === 0) {
@@ -821,13 +949,39 @@ function packCargoSpread(items, cont, opts = {}) {
 
     let best = { placed: base.placed, unplaced: base.unplaced, heightCap: cont.height };
     for (const cap of caps) {
-        const r = packCargo(items, { length: cont.length, width: cont.width, height: cap }, opts);
+        const r = packCargo(items, { length: cont.length, width: cont.width, height: cap }, capOpts);
         if (r.placed.length > best.placed.length ||
             (r.placed.length === best.placed.length && cap < best.heightCap)) {
             best = { placed: r.placed, unplaced: r.unplaced, heightCap: cap };
         }
     }
     return best;
+}
+
+// 貨物在「空載具」中是否至少有一種擺法放得下
+function fitsInEmpty(item, cont) {
+    if (item.height > cont.height + EPS) return false;
+    if (item.length <= cont.length + EPS && item.width <= cont.width + EPS) return true;
+    return item.rotatable &&
+           item.width <= cont.length + EPS && item.length <= cont.width + EPS;
+}
+
+// 多載具配載：一個載具裝不完就開下一個，直到整票貨裝完。
+// 先濾掉「空載具都放不下」的貨物 —— 剩下的每一件都保證能單獨放進空載具，
+// 因此每一輪至少裝進 1 件，迴圈必然終止。不需要人為的載具數上限，
+// 也不需要「這輪裝了 0 件就 break」的補丁分支。
+// 回傳 { carriers: [[box, ...], ...], oversized: [item, ...] }
+function packMultiCarrier(items, cont, opts = {}) {
+    const oversized = items.filter(it => !fitsInEmpty(it, cont));
+    let remaining = items.filter(it => fitsInEmpty(it, cont));
+
+    const carriers = [];
+    while (remaining.length > 0) {
+        const r = packCargoBest(remaining, cont, opts);
+        carriers.push(r.placed);
+        remaining = r.unplaced;
+    }
+    return { carriers, oversized };
 }
 // === END PACKING ===
 
@@ -855,11 +1009,7 @@ function initScene() {
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 300;
-    controls.maxDistance = 6000;
-    controls.target.set(0, containerSize.height / 2, 0);
-    controls.update();
-    controls.saveState();
+    frameContainer();
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
@@ -888,6 +1038,38 @@ function initScene() {
 
     window.addEventListener('resize', onWindowResize);
     animate();
+}
+
+// 依載具尺寸自動取景。1203 cm 貨櫃與 120 cm 棧板差了十倍，固定的相機距離
+// 與縮放範圍只能服務其中一種，切換載具時另一種不是小如芝麻就是撐爆畫面。
+// 只在尺寸與上次取景時不同才動相機 —— 尺寸沒變就代表使用者自己調的視角仍然合用，不該搶走。
+function frameDistance(size) {
+    return Math.max(size.length, size.width, size.height) * 1.6 + 200;
+}
+
+function frameContainer() {
+    const { length, width, height } = containerSize;
+    if (framedSize && framedSize.length === length &&
+        framedSize.width === width && framedSize.height === height) return;
+    framedSize = { length, width, height };
+
+    const dist = frameDistance(containerSize);
+    camera.position.set(dist, dist * 0.75, dist);
+    controls.minDistance = Math.max(20, Math.max(length, width, height) * 0.15);
+    controls.maxDistance = dist * 4;
+    controls.target.set(0, height / 2, 0);
+    controls.update();
+    controls.saveState();
+}
+
+// 標籤是世界座標下的固定尺寸貼片，寫死的大小只服務得了一種載具：
+// 對 1203 cm 貨櫃剛好，放到 120 cm 棧板上就大得蓋住整個畫面。
+// 依取景距離等比縮放，讓標籤在任何載具上看起來一樣大；
+// 基準取 40 呎櫃，因此既有的貨櫃外觀完全不變。
+const LABEL_BASE_DIST = frameDistance({ length: 1203, width: 235, height: 239 });
+
+function labelScale() {
+    return frameDistance(containerSize) / LABEL_BASE_DIST;
 }
 
 function animate() {
@@ -1020,10 +1202,11 @@ function createCargoBox(pos) {
     }
     const line1 = pos.name + (tags.length ? ` [${tags.join('、')}]` : '');
     const line2 = `${Math.round(pos.length)}×${Math.round(pos.width)}×${Math.round(pos.height)}`;
-    createLabel(line1, line2, pos.x, pos.y + pos.height / 2 + 35, pos.z);
+    const s = labelScale();
+    createLabel(line1, line2, pos.x, pos.y + pos.height / 2 + 35 * s, pos.z, s);
 }
 
-function createLabel(line1, line2, x, y, z) {
+function createLabel(line1, line2, x, y, z, scale = 1) {
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 96;
@@ -1043,7 +1226,7 @@ function createLabel(line1, line2, x, y, z) {
     const texture = new THREE.CanvasTexture(canvas);
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
     sprite.position.set(x, y, z);
-    sprite.scale.set(110, 41, 1);
+    sprite.scale.set(110 * scale, 41 * scale, 1);
     labelsGroup.add(sprite);
 }
 
@@ -1112,12 +1295,12 @@ function calculateLoading() {
 
     containerSize = cont;
     createContainer();
-    controls.target.set(0, containerSize.height / 2, 0);
+    frameContainer();
 
     const packOpts = { sortByVolume: !document.getElementById('loadInOrder').checked };
     lastResult = document.getElementById('spreadEven').checked
         ? packCargoSpread(expanded, containerSize, packOpts)
-        : packCargo(expanded, containerSize, packOpts);
+        : packCargoBest(expanded, containerSize, packOpts);
 
     renderScene();
     updateStats();
@@ -1192,20 +1375,25 @@ function evaluateRemaining() {
 
     renderScene(); // 還原畫面，清掉上一次的評估預覽
 
-    const placed = [...lastResult.placed];
-    const limit = Math.max(0, MAX_PIECES - placed.length);
-    const added = [];
-    while (added.length < limit) {
-        const box = findBestPlacement({
-            name: `新貨-${added.length + 1}`,
-            length: l, width: w, height: h,
-            stackable: stackable,
-            rotatable: rotatable,
-            color: 0xffc107
-        }, placed, containerSize);
-        if (!box) break;
-        placed.push(box);
-        added.push(box);
+    // 逐一策略在既有裝載狀態上試填，取塞得最多者（同 packCargoBest，讓長寬對調結果一致）
+    const limit = Math.max(0, MAX_PIECES - lastResult.placed.length);
+    let added = [];
+    for (const st of PACK_STRATEGIES) {
+        const placed = [...lastResult.placed];
+        const cur = [];
+        while (cur.length < limit) {
+            const box = findBestPlacement({
+                name: `新貨-${cur.length + 1}`,
+                length: l, width: w, height: h,
+                stackable: stackable,
+                rotatable: rotatable,
+                color: 0xffc107
+            }, placed, containerSize, st);
+            if (!box) break;
+            placed.push(box);
+            cur.push(box);
+        }
+        if (cur.length > added.length) added = cur;
     }
 
     added.forEach(b => {
@@ -1252,19 +1440,24 @@ function calculateFullCapacity() {
 
     containerSize = cont;
     createContainer();
-    controls.target.set(0, containerSize.height / 2, 0);
+    frameContainer();
 
-    const placed = [];
-    while (placed.length < MAX_PIECES) {
-        const box = findBestPlacement({
-            name: `箱-${placed.length + 1}`,
-            length: l, width: w, height: h,
-            stackable: stackable,
-            rotatable: rotatable,
-            color: 0xffc107
-        }, placed, containerSize);
-        if (!box) break;
-        placed.push(box);
+    // 逐一策略填滿空櫃，取裝最多者（同 packCargoBest，讓長寬對調結果一致）
+    let placed = [];
+    for (const st of PACK_STRATEGIES) {
+        const cur = [];
+        while (cur.length < MAX_PIECES) {
+            const box = findBestPlacement({
+                name: `箱-${cur.length + 1}`,
+                length: l, width: w, height: h,
+                stackable: stackable,
+                rotatable: rotatable,
+                color: 0xffc107
+            }, cur, containerSize, st);
+            if (!box) break;
+            cur.push(box);
+        }
+        if (cur.length > placed.length) placed = cur;
     }
 
     lastResult = { placed: placed, unplaced: [] };
@@ -1280,6 +1473,145 @@ function calculateFullCapacity() {
         (capped ? `<br><span class="warn">已達 ${MAX_PIECES} 件計算上限</span>` : '') +
         `<br>此計算忽略貨物清單，以空櫃裝滿為準`;
     resultDiv.classList.add('visible');
+}
+
+// ============================================================
+// 多載具配載：整票貨裝不完一個載具時，要幾個載具才裝得完
+// ============================================================
+// 讀取勾選的候選載具。棧板共用「堆貨高度」，貨櫃候選用它自己的高度。
+function readCarrierCandidates() {
+    const stackHeight = parseFloat(document.getElementById('carrierHeight').value);
+    const list = [];
+    ['A', 'B'].forEach((tag, i) => {
+        if (!document.getElementById(`carrierUse${i + 1}`).checked) return;
+        list.push({
+            name: `棧板 ${tag}`,
+            length: parseFloat(document.getElementById(`carrierL${i + 1}`).value),
+            width: parseFloat(document.getElementById(`carrierW${i + 1}`).value),
+            height: stackHeight
+        });
+    });
+    if (document.getElementById('carrierUseCont').checked) {
+        list.push({ name: '貨櫃', ...readContainerInputs() });
+    }
+    return list;
+}
+
+// 候選排名：能把整票貨裝完者優先 → 載具數少者 → 總佔地面積小者
+function rankCarrierResults(results) {
+    const key = r => [r.oversized.length > 0 ? 1 : 0, r.carriers.length, r.baseArea];
+    return [...results].sort((a, b) => {
+        const ka = key(a), kb = key(b);
+        return ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2];
+    });
+}
+
+function calculateMultiCarrier() {
+    updateCargoData();
+
+    if (cargoData.length === 0) {
+        alert('請先添加貨物！');
+        return;
+    }
+    for (const c of cargoData) {
+        if (!(c.length > 0 && c.width > 0 && c.height > 0)) {
+            alert(`貨物「${c.name}」的尺寸必須大於 0！`);
+            return;
+        }
+    }
+
+    const candidates = readCarrierCandidates();
+    if (candidates.length === 0) {
+        alert('請至少勾選一種載具！');
+        return;
+    }
+    for (const cand of candidates) {
+        if (!(cand.length > 0 && cand.width > 0 && cand.height > 0)) {
+            alert(`「${cand.name}」的長寬高必須大於 0（堆貨高度是否已填寫？）`);
+            return;
+        }
+    }
+
+    const expanded = expandCargo();
+    if (expanded.length > MAX_PIECES) {
+        alert(`貨物總件數 ${expanded.length} 超過上限 ${MAX_PIECES} 件，請減少數量。`);
+        return;
+    }
+
+    // 多載具配載採「裝滿為先」，不套用平均堆疊 ——
+    // 平均堆疊是為了貨櫃內的重心分布，而這裡要回答的是「最少要幾個載具」
+    const packOpts = { sortByVolume: !document.getElementById('loadInOrder').checked };
+    const results = candidates.map(cand => {
+        const r = packMultiCarrier(expanded, cand, packOpts);
+        const capacity = cand.length * cand.width * cand.height;
+        return {
+            carrier: cand,
+            carriers: r.carriers,
+            oversized: r.oversized,
+            rates: r.carriers.map(c =>
+                c.reduce((s, b) => s + b.l * b.w * b.h, 0) / capacity * 100),
+            baseArea: r.carriers.length * cand.length * cand.width
+        };
+    });
+
+    const ranked = rankCarrierResults(results);
+    const winner = ranked[0];
+
+    // 3D 切換到推薦載具的第 1 個；灰色只保留「任何擺法都放不下」的貨物，
+    // 要裝進第 2、3 個載具的貨不算未裝載，由報表交代
+    if (winner.carriers.length > 0) {
+        containerSize = {
+            length: winner.carrier.length,
+            width: winner.carrier.width,
+            height: winner.carrier.height
+        };
+        document.getElementById('containerPreset').value = 'custom';
+        document.getElementById('containerLength').value = containerSize.length;
+        document.getElementById('containerWidth').value = containerSize.width;
+        document.getElementById('containerHeight').value = containerSize.height;
+        createContainer();
+        frameContainer();
+
+        lastResult = { placed: winner.carriers[0], unplaced: winner.oversized };
+        renderScene();
+        updateStats();
+        document.getElementById('resultSummary').classList.remove('visible');
+    }
+
+    showCarrierSummary(ranked, winner, expanded.length);
+}
+
+function showCarrierSummary(ranked, winner, totalPieces) {
+    let html = `📊 整票貨 <b>${totalPieces}</b> 件的配載結果`;
+
+    ranked.forEach((r, i) => {
+        const c = r.carrier;
+        html += `<div class="row${i === 0 ? ' rec' : ''}">` +
+                `${i === 0 ? '🏆 ' : '　'}${c.name} ${c.length}×${c.width}×${c.height} cm` +
+                ` — 需 <b>${r.carriers.length}</b> 個</div>`;
+        if (r.carriers.length > 0) {
+            html += `<div class="detail">` + r.carriers.map((boxes, k) =>
+                `<em>#${k + 1} ${boxes.length}件 ${r.rates[k].toFixed(0)}%</em>`).join('') + `</div>`;
+        }
+        if (r.oversized.length > 0) {
+            html += `<div class="detail warn">⚠️ ${r.oversized.length} 件任何擺法都放不下此載具</div>`;
+        }
+    });
+
+    if (document.getElementById('spreadEven').checked) {
+        html += `<div class="row detail">※ 多載具配載採「裝滿為先」，不套用平均堆疊</div>`;
+    }
+    if (winner.carriers.length > 0) {
+        html += `<div class="row">🖼️ 3D 顯示「${winner.carrier.name}」的第 1 個`;
+        if (winner.carrier.name.startsWith('棧板')) {
+            html += `（連棧板本身總高 ${winner.carrier.height + PALLET_DECK_H} cm）`;
+        }
+        html += `<br>按「🔄 計算裝載」可切回貨櫃</div>`;
+    }
+
+    const div = document.getElementById('carrierResult');
+    div.innerHTML = html;
+    div.classList.add('visible');
 }
 
 function showResultSummary() {
@@ -1367,6 +1699,7 @@ function invalidateResult() {
     lastResult = null;
     evalPlaced = [];
     document.getElementById('evalResult').classList.remove('visible');
+    document.getElementById('carrierResult').classList.remove('visible');
     updateStats();
     showResultSummary();
 }
@@ -1436,10 +1769,10 @@ function removeCargoItem(id) {
     invalidateResult();
 }
 
+// 重置視角＝重新框住目前的載具（而非回到開檔時的貨櫃視角）
 function resetView() {
-    controls.reset();
-    controls.target.set(0, containerSize.height / 2, 0);
-    controls.update();
+    framedSize = null;
+    frameContainer();
 }
 
 function clearAll() {
