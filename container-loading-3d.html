@@ -671,6 +671,7 @@ const SUPPORT_RATIO = 0.7;  // 貨物底面積至少需被下方支撐的比例
 const FLOOR_T = 5;          // 貨櫃底板顯示厚度 (cm)
 const MAX_PIECES = 1500;    // 展開後的貨物件數上限，避免瀏覽器凍結
 const GRID_CAP = 10000;     // 候選欄位網格上限，超過時退回箱角欄位以免凍結
+const OUTSIDE_CAP = 40;     // 櫃外「無法裝入」最多畫幾件，其餘只以文字交代
 const PALLET_DECK_H = 12.5; // 棧板本身高度 (cm)，僅供提示文字，不計入堆貨高度
 
 // 裝載策略。貪婪法對「先填哪個軸」與「先試哪個方位」極度敏感：單一策略會讓
@@ -1455,13 +1456,15 @@ function renderScene() {
         });
     });
 
-    // 無法裝載的貨物以灰色排列在貨櫃右側（+X 方向）
+    // 無法裝載的貨物以灰色排列在貨櫃右側（+X 方向）。
+    // 只畫前 OUTSIDE_CAP 件：把 800 多件貨鋪在櫃外會蓋掉整個畫面（每件還帶一張
+    // 標籤貼圖），使用者反而看不到櫃內裝了什麼。剩下的件數由結果摘要用文字交代。
     let outsideX = containerSize.length / 2 + 100;
     let outsideZ = -containerSize.width / 2;
     let rowMaxWidth = 0;
     const rowLimit = containerSize.length / 2 + 900;
 
-    lastResult.unplaced.forEach(item => {
+    lastResult.unplaced.slice(0, OUTSIDE_CAP).forEach(item => {
         if (outsideX + item.length > rowLimit && rowMaxWidth > 0) {
             outsideX = containerSize.length / 2 + 100;
             outsideZ += rowMaxWidth + 40;
@@ -1823,10 +1826,17 @@ function showResultSummary() {
         return;
     }
     const loaded = lastResult.placed.length;
-    const total = loaded + lastResult.unplaced.length;
+    const left = lastResult.unplaced.length;
+    const total = loaded + left;
     let html = `✅ 已裝載 <b>${loaded}/${total}</b> 件`;
-    if (lastResult.unplaced.length > 0) {
-        html += `<br><span class="warn">⚠️ ${lastResult.unplaced.length} 件無法裝入</span>（灰色顯示於貨櫃右側）`;
+    if (left > 0) {
+        const shown = Math.min(left, OUTSIDE_CAP);
+        html += `<br><span class="warn">⚠️ ${left} 件裝不進這一個貨櫃</span>` +
+                `（灰色顯示於貨櫃右側${left > shown ? `，僅畫出前 ${shown} 件` : ''}）`;
+        // 「計算裝載」只處理單一貨櫃。整票貨裝不完時，使用者要的答案其實在
+        // 多載具配載那邊 —— 直接把人帶過去，不要讓他對著 800 個灰箱猜。
+        html += `<br>👉 整票貨要幾個載具？請用下方「<b>多載具配載</b>」計算` +
+                `（${loaded} 件 × N 個載具才裝得完）`;
     }
     if (lastResult.heightCap !== undefined && lastResult.heightCap < containerSize.height - 1) {
         html += `<br>📏 平均堆疊生效：堆疊高度上限 ≈ ${Math.ceil(lastResult.heightCap)} cm`;
