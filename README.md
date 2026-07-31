@@ -2,7 +2,7 @@
 
 一個基於 Web 的互動式 3D 貨櫃裝載模擬與優化工具，使用極點啟發式演算法計算裝載配置，並提供即時 3D 視覺化呈現。整個系統為**單一 HTML 檔案**，開啟即用，無需安裝。
 
-![Version](https://img.shields.io/badge/version-2.2.1-blue)
+![Version](https://img.shields.io/badge/version-2.2.2-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Three.js](https://img.shields.io/badge/Three.js-r128-orange)
 
@@ -118,6 +118,24 @@
 ---
 
 ## 使用說明
+
+### 版本標記
+
+頁首右上角（「系統運行中」下方）顯示這份檔案的版本：
+
+```
+v2.2.2 · 2026-07-28 · ab05ace
+```
+
+依序是版本號、發布日期、對應的 commit。**回報問題時請一併附上這一行** —— 這個檔案是單一 HTML、可以自由複製散佈，同事手上那份可能是舊版，有版本號才知道彼此在講同一份程式。該行整行可一鍵選取。
+
+版本值寫在原始碼的 `BUILD` 常數，改完程式要一併更新：
+
+```bash
+git log -1 --format='%h  %ad' --date=short   # 取 commit 與日期，填回 BUILD
+```
+
+其中的 commit 是「本檔案發布時的 HEAD」，也就是這份內容所基於的那個提交 —— 一個提交無法把自己的 hash 寫進自己的內容裡，因此固定填上一個提交。
 
 ### 3D 場景操作
 
@@ -384,6 +402,7 @@ const PACK_STRATEGIES = [
 | `rankCarrierResults(results)` | 候選排名：能裝完 → 載具數 → 佔地面積 |
 | `renderCarrierSummary()` / `describeStackHeight(r)` | 配載報表與實際堆高（含連棧板總高） |
 | `describeLayers(boxes)` | 依高度分層並描述每層件數，供對照 3D 畫面清點 |
+| `BUILD` → `#buildStamp` | 版本標記常數；於 `DOMContentLoaded` 最先寫入頁首，3D 載入失敗時也看得到 |
 | `showCarrierIn(ri, ci)` | 在 3D 畫出第 ri 名載具的第 ci 個 |
 | `updateStats()` | 更新儀表板（含評估箱） |
 | `showResultSummary()` | 顯示裝載結果摘要 |
@@ -484,6 +503,12 @@ MIT License
 ---
 
 ## 更新日誌
+
+### v2.2.2 (2026)
+
+**新增功能**
+
+- 🆕 **版本標記**：頁首右上角顯示 `v2.2.2 · 2026-07-28 · ab05ace`（版本號 · 日期 · commit），整行可一鍵選取。這個檔案是單一 HTML、會被自由複製散佈，回報問題時附上這一行才知道彼此講的是不是同一份程式。值寫在 `BUILD` 常數，3D 引擎載入失敗時也照樣顯示。
 
 ### v2.2.1 (2026)
 

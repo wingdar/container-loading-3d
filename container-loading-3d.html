@@ -53,6 +53,20 @@
             font-size: 14px;
         }
 
+        .header-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .build-stamp {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 12px;
+            color: #a0aec0;
+            user-select: all;   /* 讓使用者一鍵選取整行貼進問題回報 */
+        }
+
         .status-dot {
             width: 10px;
             height: 10px;
@@ -498,9 +512,13 @@
         <div class="dashboard">
             <div class="dashboard-header">
                 <h1>🚢 貨櫃裝載模擬系統</h1>
-                <div class="status-indicator">
-                    <span class="status-dot"></span>
-                    <span>系統運行中</span>
+                <div class="header-right">
+                    <div class="status-indicator">
+                        <span class="status-dot"></span>
+                        <span>系統運行中</span>
+                    </div>
+                    <!-- 版本標記由 BUILD 常數填入，回報問題時請一併附上 -->
+                    <div class="build-stamp" id="buildStamp" title="回報問題時請附上這一行"></div>
                 </div>
             </div>
 
@@ -672,6 +690,13 @@ const FLOOR_T = 5;          // 貨櫃底板顯示厚度 (cm)
 const MAX_PIECES = 1500;    // 展開後的貨物件數上限，避免瀏覽器凍結
 const GRID_CAP = 10000;     // 候選欄位網格上限，超過時退回箱角欄位以免凍結
 const OUTSIDE_CAP = 40;     // 櫃外「無法裝入」最多畫幾件，其餘只以文字交代
+
+// 版本標記，顯示在頁首右上角。
+// commit 是「本檔案發布時的 HEAD」，也就是這份內容所基於的那個提交
+// （提交本身無法寫入自己的 hash，因此固定填上一個提交）。
+// 改完程式要一併更新，取值：
+//   git log -1 --format='%h  %ad' --date=short
+const BUILD = { version: '2.2.2', commit: 'ab05ace', date: '2026-07-28' };
 const PALLET_DECK_H = 12.5; // 棧板本身高度 (cm)，僅供提示文字，不計入堆貨高度
 
 // 裝載策略。貪婪法對「先填哪個軸」與「先試哪個方位」極度敏感：單一策略會讓
@@ -2056,6 +2081,10 @@ function applyGlobalSettings() {
 // 初始化
 // ============================================================
 window.addEventListener('DOMContentLoaded', () => {
+    // 版本標記先寫，3D 引擎載入失敗時也要看得到（那正是最需要版本號的時候）
+    document.getElementById('buildStamp').textContent =
+        `v${BUILD.version} · ${BUILD.date} · ${BUILD.commit}`;
+
     if (typeof THREE === 'undefined' || typeof THREE.OrbitControls === 'undefined') {
         document.getElementById('canvas-container').innerHTML =
             '<div class="webgl-error">⚠️ 無法載入 3D 引擎（Three.js CDN）。<br>請確認網路連線後重新整理頁面。</div>';
